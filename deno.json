@@ -1,0 +1,15 @@
+{
+  "fmt": {
+    "lineWidth": 180,
+    "include": ["src/", "test/"]
+  },
+  "imports": {
+    "base/": "https://raw.githubusercontent.com/randomcurve/base/v1.1.1/",
+    "std/": "https://deno.land/std@0.196.0/"
+  },
+  "tasks": {
+    "check": "deno check **/*.ts && deno fmt --check",
+    "lint": "deno lint src test",
+    "test": "deno test -A"
+  }
+}
