@@ -4,7 +4,7 @@ import { contentType } from "std/media_types/mod.ts";
 // Special variables are body, request, session, session
 
 // deno-lint-ignore ban-types
-type Controller = Object;
+export type Controller = Object;
 
 // deno-lint-ignore ban-types
 type Handler = Function;
@@ -116,14 +116,14 @@ function validate(requestParameters: Record<string, unknown>, functionParameters
     parameters[fpn] = rpv;
 
     // Check if it is correctly a boolean
-    if (typeof (fpv) === "boolean" && isDefined) {
+    if (typeof fpv === "boolean" && isDefined) {
       const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'boolean'";
       if (rpv !== "true" && rpv !== "false") throw new Deno.errors.InvalidData(message);
       else parameters[fpn] = rpv === "true";
     }
 
     // Check if it is correctly a number
-    if (typeof (fpv) === "number" && isDefined) {
+    if (typeof fpv === "number" && isDefined) {
       const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'number'";
       const n = parseInt(String(rpv));
       if (Number.isNaN(n)) throw new Deno.errors.InvalidData(message);
@@ -131,7 +131,7 @@ function validate(requestParameters: Record<string, unknown>, functionParameters
     }
 
     // Check if it is correctly an object
-    if (typeof (fpv) === "object" && isDefined) {
+    if (typeof fpv === "object" && isDefined) {
       const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'object'";
       try {
         parameters[fpn] = JSON.parse(String(rpv));
@@ -159,7 +159,7 @@ export async function loadControllers(path: string): Promise<Map<string, { new (
   const files = Deno.readDirSync(base);
   for (const file of files) {
     if (!file.isFile || !file.name.endsWith(".ts")) continue;
-    const url = new URL(file.name, base);
+    const url = new URL(base + "/" + file.name);
     const module = await import(url.toString());
     map.set(file.name, module.default);
     if (!module) throw new Error(`No module for controller file '${file.name}'`);
@@ -211,7 +211,7 @@ export async function handle(controller: Controller, request: Request, base?: st
     if (body instanceof Response) return body;
     // console.log("grout.ts[193] extension: ", extension);
     if (extension) ct = contentType(extension) ?? extension;
-    else if (typeof (body) === "string") ct = contentType("html");
+    else if (typeof body === "string") ct = contentType("html");
     else if (body instanceof ArrayBuffer) ct = contentType("bin");
     else body = JSON.stringify(body);
     return new Response(body, { status: Status.OK, headers: { "content-type": ct } });

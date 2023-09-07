@@ -15,8 +15,8 @@ export class Fetcher {
 
   async go(method: string, url: string, data?: string | JsonValue) {
     const options: RequestInit = { method };
-    if (typeof (data) !== "string") options.headers = { "Content-Type": "application/json" };
-    options.body = typeof (data) === "string" ? data : JSON.stringify(data);
+    if (typeof data !== "string") options.headers = { "Content-Type": "application/json" };
+    options.body = typeof data === "string" ? data : JSON.stringify(data);
     const response = await fetch(new URL(url, this.base), options);
     if (response.status === 204 || options.method === "HEAD") response.data = "";
     else if (response.headers.get("Content-Type")?.includes("application/json")) response.data = await response.json();
