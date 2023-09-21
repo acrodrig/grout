@@ -2,7 +2,7 @@ import { type JsonValue } from "std/json/mod.ts";
 
 declare global {
   export interface Response {
-    data: any;
+    data: unknown;
   }
 }
 

@@ -46,7 +46,7 @@ test("get", async () => {
 test("get 404", async () => {
   const { status, data } = await fetcher.go("GET", "/users/42");
   assertEquals(status, Status.NotFound);
-  assertExists(data.error);
+  assertEquals((data as Error).name, "NotFound");
 });
 
 // Deletes user with id 1 (John)
@@ -61,7 +61,7 @@ test("delete 404", async () => {
   const { status, headers, data } = await fetcher.go("DELETE", "/users/1");
   assertEquals(status, Status.NotFound);
   assertEquals(headers.get("content-type"), "application/json; charset=UTF-8");
-  assertExists(data.error);
+  assertEquals((data as Error).name, "NotFound");
 });
 
 // Getting a head on the list of users is allowed and has no body
@@ -96,7 +96,7 @@ test("put", async () => {
 test("getPromiseFail", async () => {
   const { status, data } = await fetcher.go("GET", "/users/123/async");
   assertEquals(status, Status.NotFound);
-  assertExists(data.error);
+  assertEquals((data as Error).name, "NotFound");
 });
 
 // Tries existing user 0 on a "promised" method and get a 200

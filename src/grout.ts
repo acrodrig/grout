@@ -167,6 +167,7 @@ export async function loadControllers(path: string): Promise<Map<string, { new (
 }
 
 // Will return a middleware that takes `ctx` as a single parameter
+// deno-lint-ignore ban-types
 export async function handle<T extends Object & Controller>(controller: T, request: Request, base?: string) {
   let ct = contentType("json");
 
@@ -179,7 +180,7 @@ export async function handle<T extends Object & Controller>(controller: T, reque
   if (!route && Object.keys(map).length) {
     const status = Status.MethodNotAllowed;
     const error = "A route exists for this URL, but not for method '" + request.method + "'";
-    return new Response(JSON.stringify({ error }), { status, headers: { "content-type": ct } });
+    return new Response(JSON.stringify({ message: error }), { status, headers: { "content-type": ct } });
   }
   if (!route) return undefined;
 
@@ -221,6 +222,6 @@ export async function handle<T extends Object & Controller>(controller: T, reque
     if (ex instanceof Deno.errors.NotFound) status = Status.NotFound;
     if (ex instanceof Deno.errors.NotSupported) status = Status.NotImplemented;
     if (status === Status.InternalServerError) console.error(ex);
-    return new Response(JSON.stringify({ error: ex.message }), { status, headers: { "content-type": ct } });
+    return new Response(JSON.stringify(ex), { status, headers: { "content-type": ct } });
   }
 }
