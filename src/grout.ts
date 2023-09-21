@@ -1,10 +1,9 @@
 import { isHttpMethod, Status } from "std/http/mod.ts";
 import { contentType } from "std/media_types/mod.ts";
 
-// Special variables are body, request, session, session
+// Special variables are $body, $request, $session, $user
 
-// deno-lint-ignore ban-types
-export type Controller = Object;
+export type Controller = { base?: string };
 
 // deno-lint-ignore ban-types
 type Handler = Function;
@@ -168,7 +167,7 @@ export async function loadControllers(path: string): Promise<Map<string, { new (
 }
 
 // Will return a middleware that takes `ctx` as a single parameter
-export async function handle(controller: Controller, request: Request, base?: string) {
+export async function handle<T extends Object & Controller>(controller: T, request: Request, base?: string) {
   let ct = contentType("json");
 
   // If there is no base, assign the kebab version of the controller name
@@ -189,20 +188,20 @@ export async function handle(controller: Controller, request: Request, base?: st
   const requestParameters: Record<string, unknown> = Object.assign({}, match?.search.groups, match?.pathname.groups);
 
   // Assign request
-  requestParameters.request = request;
+  requestParameters.$request = request;
 
   // Extract extension
   const parts = request.url.split(".");
   const extension = parts.length > 1 ? parts.pop() : undefined;
 
   // Add special variables "body" if needed
-  if (Object.hasOwn(functionParameters, "body")) {
-    requestParameters.body = await request.json();
+  if (Object.hasOwn(functionParameters, "$body")) {
+    requestParameters.$body = await request.json();
   }
 
   // Now user if applicable
-  if (Object.hasOwn(functionParameters, "user")) {
-    requestParameters.user = await currentUserChecker(request);
+  if (Object.hasOwn(functionParameters, "$user")) {
+    requestParameters.$user = await currentUserChecker(request);
   }
 
   try {

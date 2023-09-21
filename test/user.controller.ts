@@ -55,18 +55,18 @@ export class UserController {
   }
 
   // PATCH /users/:id
-  patch_$id(id = -1, body: Partial<User>) {
+  patch_$id(id = -1, $body: Partial<User>) {
     const user = users.find((u) => u.id === id);
     if (!user) throw new Deno.errors.NotFound();
-    Object.assign(user, body);
+    Object.assign(user, $body);
     return { id, status: "patched" };
   }
 
   // POST /users
-  post(body: User) {
-    let user = users.find((u) => u.id === body.id);
+  post($body: User) {
+    let user = users.find((u) => u.id === $body.id);
     if (user) throw new Deno.errors.AlreadyExists();
-    user = body;
+    user = $body;
     const ids = users.map((u) => u.id);
     if (!user.id) user.id = Math.max(...ids) + 1;
     users.push(user);
@@ -74,10 +74,10 @@ export class UserController {
   }
 
   // PUT /users/:id
-  put_$id(id = 1, body: User) {
+  put_$id(id = 1, $body: User) {
     const user = users.find((u) => u.id === id);
     if (!user) throw new Deno.errors.NotFound();
-    Object.assign(user, body);
+    Object.assign(user, $body);
     return { id, status: "put" };
   }
 
