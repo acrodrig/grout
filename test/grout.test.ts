@@ -3,8 +3,8 @@
 // Corresponds to https://github.com/typestack/routing-controllers/blob/develop/test/functional/json-controller-methods.spec.ts
 
 import { Status } from "std/http/mod.ts";
-import { assertEquals, assertExists } from "std/assert/mod.ts";
-import { handle } from "../src/grout.ts";
+import { assertEquals } from "std/assert/mod.ts";
+import { handle, setCurrentUserChecker } from "../src/grout.ts";
 import { Fetcher } from "./helpers.ts";
 import { UserController } from "./user.controller.ts";
 
@@ -14,6 +14,12 @@ const PORT = 8378;
 
 const controller = new UserController();
 
+// Set user checker function
+setCurrentUserChecker<string>((request: Request) => {
+  const user = request.headers.get("x-user") ?? undefined;
+  return Promise.resolve(user);
+});
+
 Deno.serve({ port: PORT }, async (request: Request) => {
   const response = await handle(controller, request, "/users");
   return response ?? new Response("NOT IMPLEMENTED", { status: Status.NotImplemented });
@@ -21,17 +27,29 @@ Deno.serve({ port: PORT }, async (request: Request) => {
 
 const fetcher = new Fetcher("http://localhost:" + PORT);
 
-// Listing all users via GET /users
+// Listing all (non-admin) users via GET /users
 test("list", async () => {
   const { status, headers, data } = await fetcher.go("GET", "/users");
   assertEquals(status, Status.OK);
   assertEquals(headers.get("content-type"), "application/json; charset=UTF-8");
-  assertEquals(data, [{ id: 0, name: "root" }, { id: 1, name: "John" }, { id: 2, name: "Jane" }, { id: 3, name: "Patrick" }]);
+  assertEquals(data, [{ id: 1, name: "John" }, { id: 2, name: "Jane" }, { id: 3, name: "Patrick" }]);
+});
+
+// Listing all users via GET /users
+// NOTE: This is also testing specificy of routes (i.e. /users/admins is more specific than /users:id)
+test("admins", async () => {
+  // First with no user
+  const { status } = await fetcher.go("GET", "/users/admins", undefined, true);
+  assertEquals(status, Status.Unauthorized);
+
+  // Now with admin user
+  const { data } = await fetcher.go("GET", "/users/admins", undefined, true, { "x-user": "root" });
+  assertEquals(data, [{ id: 0, name: "root", admin: true }]);
 });
 
 // Cannot apply method DELETE to the list of users
 test("list 405", async () => {
-  const { status } = await fetcher.go("DELETE", "/users");
+  const { status } = await fetcher.go("DELETE", "/users", undefined, true);
   assertEquals(status, Status.MethodNotAllowed);
 });
 
@@ -44,7 +62,7 @@ test("get", async () => {
 
 // Gets a non-existant user with id 42, which returns a 404
 test("get 404", async () => {
-  const { status, data } = await fetcher.go("GET", "/users/42");
+  const { status, data } = await fetcher.go("GET", "/users/42", undefined, true);
   assertEquals(status, Status.NotFound);
   assertEquals((data as Error).name, "NotFound");
 });
@@ -58,7 +76,7 @@ test("delete", async () => {
 
 // Tries to delete user with id 1 (John) again, which returns a 404
 test("delete 404", async () => {
-  const { status, headers, data } = await fetcher.go("DELETE", "/users/1");
+  const { status, headers, data } = await fetcher.go("DELETE", "/users/1", undefined, true);
   assertEquals(status, Status.NotFound);
   assertEquals(headers.get("content-type"), "application/json; charset=UTF-8");
   assertEquals((data as Error).name, "NotFound");
@@ -94,7 +112,7 @@ test("put", async () => {
 
 // Tries non-existant user 123 on a "promised" method and get a 404
 test("getPromiseFail", async () => {
-  const { status, data } = await fetcher.go("GET", "/users/123/async");
+  const { status, data } = await fetcher.go("GET", "/users/123/async", undefined, true);
   assertEquals(status, Status.NotFound);
   assertEquals((data as Error).name, "NotFound");
 });
@@ -103,10 +121,10 @@ test("getPromiseFail", async () => {
 test("getPromiseOk", async () => {
   const { status, data } = await fetcher.go("GET", "/users/0/async");
   assertEquals(status, Status.OK);
-  assertEquals(data, { id: 0, name: "root" });
+  assertEquals(data, { id: 0, name: "root", admin: true });
 });
 
-// Tries non existing controller method /balls/123 and get a 501
+// Tries non-existing controller method /balls/123 and get a 501
 test("nonExistant", async () => {
   const { status } = await fetcher.go("GET", "/balls/123");
   assertEquals(status, Status.NotImplemented);

@@ -1,5 +1,8 @@
+import { getLogger } from "std/log/mod.ts";
 import { isHttpMethod, Status } from "std/http/mod.ts";
 import { contentType } from "std/media_types/mod.ts";
+
+const logger = getLogger("grout:grout");
 
 // Special variables are $body, $request, $session, $user
 
@@ -12,6 +15,7 @@ type Handler = Function;
  * Route embedded in class method
  */
 type Route = {
+  pathname: string;
   method: string;
   pattern: URLPattern;
   handler: Handler;
@@ -64,7 +68,9 @@ export function extractRoutes(controller: Controller, base: string): Route[] {
   // Initialize to an empty array
   routes = [];
   // const proto = Object.getPrototypeOf(controller);
-  for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(controller))) {
+  const protoNames = Object.getOwnPropertyNames(Object.getPrototypeOf(controller));
+  const ownNames = Object.getOwnPropertyNames(controller);
+  for (const name of Object.assign(protoNames, ownNames)) {
     const property = (controller as any)[name];
     if (name === "constructor" || !(property instanceof Function)) continue;
     const handler = property as Handler;
@@ -79,20 +85,38 @@ export function extractRoutes(controller: Controller, base: string): Route[] {
     const pathname = base + (parts.length ? "/" : "") + parts.join("/");
     const pattern = new URLPattern({ pathname });
     const parameters = getParameters(handler);
-    routes.push({ method, pattern, handler, parameters });
+    routes.push({ pathname, method, pattern, handler, parameters });
   }
+
+  // More specific routes (with less parameters) should be first, longer routes should be first
+  routes.sort((r1, r2) => {
+    const p1 = r1.pathname.split(":").length - 1;
+    const p2 = r2.pathname.split(":").length - 1;
+    if (p1 != p2) return p1 - p2;
+    return r2.pathname.length - r1.pathname.length;
+  });
+
   cache.set(controller, routes);
   return routes;
 }
 
-function matchRoutes(controller: Controller, base: string, url: string): Record<string, Route> {
+function matchRoute(controller: Controller, method: string, base: string, url: string) {
   const routes = extractRoutes(controller, base);
-  const matches: Record<string, Route> = {};
   for (const route of routes) {
+    if (route.method !== method) continue;
     const match = route.pattern.test(url);
-    if (match) matches[route.method] = route;
+    if (match) return route;
   }
-  return matches;
+  return undefined;
+}
+
+function countRoutes(controller: Controller, base: string, url: string): number {
+  const routes = extractRoutes(controller, base);
+  let count = 0;
+  for (const route of routes) {
+    if (route.pattern.test(url)) count++;
+  }
+  return count;
 }
 
 function validate(requestParameters: Record<string, unknown>, functionParameters: Record<string, unknown>): Record<string, unknown> {
@@ -106,6 +130,7 @@ function validate(requestParameters: Record<string, unknown>, functionParameters
 
     // Check if the parameter is required
     if (fpv === undefined && rpv === undefined) {
+      logger.warning({ method: "validate", parameter: fpn, condition: "REQUIRED" });
       throw new Deno.errors.InvalidData("Parameter '" + fpn + "' is required");
     }
 
@@ -117,16 +142,22 @@ function validate(requestParameters: Record<string, unknown>, functionParameters
     // Check if it is correctly a boolean
     if (typeof fpv === "boolean" && isDefined) {
       const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'boolean'";
-      if (rpv !== "true" && rpv !== "false") throw new Deno.errors.InvalidData(message);
-      else parameters[fpn] = rpv === "true";
+      if (rpv !== "true" && rpv !== "false") {
+        logger.warning({ method: "validate", parameter: fpn, type: "boolean", value: rpv, status: Status.BadRequest });
+        throw new Deno.errors.InvalidData(message);
+      }
+      parameters[fpn] = rpv === "true";
     }
 
     // Check if it is correctly a number
     if (typeof fpv === "number" && isDefined) {
       const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'number'";
       const n = parseInt(String(rpv));
-      if (Number.isNaN(n)) throw new Deno.errors.InvalidData(message);
-      else parameters[fpn] = n;
+      if (Number.isNaN(n)) {
+        logger.warning({ method: "validate", parameter: fpn, type: "number", value: rpv, status: Status.BadRequest });
+        throw new Deno.errors.InvalidData(message);
+      }
+      parameters[fpn] = n;
     }
 
     // Check if it is correctly an object
@@ -134,8 +165,8 @@ function validate(requestParameters: Record<string, unknown>, functionParameters
       const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'object'";
       try {
         parameters[fpn] = JSON.parse(String(rpv));
-      } catch (ex) {
-        console.error(ex);
+      } catch (_ex) {
+        logger.warning({ method: "validate", parameter: fpn, type: "object", value: rpv, status: Status.BadRequest });
         throw new Deno.errors.InvalidData(message);
       }
     }
@@ -148,7 +179,7 @@ let currentUserChecker = function (_request: Request): Promise<unknown> {
   return Promise.resolve(undefined);
 };
 
-export function setCurrentUserChecker<U>(cuc: (request: Request) => Promise<U>) {
+export function setCurrentUserChecker<U>(cuc: (request: Request) => Promise<U | undefined>) {
   currentUserChecker = cuc;
 }
 
@@ -174,12 +205,12 @@ export async function handle<T extends Object & Controller>(controller: T, reque
   // If there is no base, assign the kebab version of the controller name
   if (!base) base = "/" + kebabCase(controller.constructor.name);
 
-  // Get a list of all matching routes
-  const map = matchRoutes(controller, base, request.url);
-  const route = map[request.method];
-  if (!route && Object.keys(map).length) {
+  // Get a matching route
+  const route = matchRoute(controller, request.method, base, request.url);
+  if (!route && countRoutes(controller, base, request.url)) {
     const status = Status.MethodNotAllowed;
     const error = "A route exists for this URL, but not for method '" + request.method + "'";
+    logger.warning({ method: "handle", httpMethod: request.method, route: route, status });
     return new Response(JSON.stringify({ message: error }), { status, headers: { "content-type": ct } });
   }
   if (!route) return undefined;
@@ -206,22 +237,40 @@ export async function handle<T extends Object & Controller>(controller: T, reque
   }
 
   try {
+    // Check that is it needs a user it has one!
+    if ("$user" in requestParameters && !requestParameters.$user) throw new Deno.errors.PermissionDenied();
+
+    // Validate parameters
     const parameters = validate(requestParameters, functionParameters!);
+
+    // Call the handler
     let body = await route.handler.apply(controller, Object.values(parameters));
     if (body instanceof Response) return body;
-    // console.log("grout.ts[193] extension: ", extension);
+
+    // Assign content type depending on the extension and/or body
     if (extension) ct = contentType(extension) ?? extension;
     else if (typeof body === "string") ct = contentType("html");
     else if (body instanceof ArrayBuffer) ct = contentType("bin");
     else body = JSON.stringify(body);
+
+    // Contruct response
     return new Response(body, { status: Status.OK, headers: { "content-type": ct } });
   } catch (ex) {
+    // Assign default status if we are here
     let status = Status.InternalServerError;
     if (ex instanceof Deno.errors.AlreadyExists) status = Status.Conflict;
     if (ex instanceof Deno.errors.InvalidData) status = Status.BadRequest;
     if (ex instanceof Deno.errors.NotFound) status = Status.NotFound;
     if (ex instanceof Deno.errors.NotSupported) status = Status.NotImplemented;
-    if (status === Status.InternalServerError) console.error(ex);
+    if (ex instanceof Deno.errors.PermissionDenied) status = Status.Unauthorized;
+
+    const log = { method: "handle", httpMethod: request.method, route: route, status, message: ex.message };
+    if (status === Status.InternalServerError) {
+      logger.error(log);
+      console.error(ex);
+    }
+    else logger.warning(log);
+
     return new Response(JSON.stringify(ex), { status, headers: { "content-type": ct } });
   }
 }

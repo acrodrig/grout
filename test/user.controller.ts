@@ -1,11 +1,12 @@
 type User = {
   id: number;
   name: string;
+  admin?: boolean;
 };
 
 // Database has three users: 'root', 'john' and 'jane' (ids 1,2,3)
 const users: User[] = [
-  { id: 0, name: "root" },
+  { id: 0, name: "root", admin: true },
   { id: 1, name: "John" },
   { id: 2, name: "Jane" },
   { id: 3, name: "Patrick" },
@@ -27,7 +28,15 @@ export class UserController {
 
   // GET /users
   get() {
-    return users;
+    return users.filter((u) => !u.admin);
+  }
+
+  // GET /users/admins
+  get_admins($user: string) {
+    // Requires authenticated admin user to proceed
+    const admin = this.find($user)?.admin;
+    if (!admin) throw new Deno.errors.PermissionDenied();
+    return users.filter((u) => u.admin);
   }
 
   // GET /users/:id
