@@ -6,7 +6,17 @@ const logger = getLogger("grout:grout");
 
 // Special variables are $body, $request, $session, $user
 
-export type Controller = { base: string };
+export type Controller = {
+  /**
+   * Indicates the base path for all routes in this controller
+   */
+  base: string;
+
+  /**
+   * Indicates if the controller is open (i.e. no authentication required)
+   */
+  open?: boolean;
+};
 
 // deno-lint-ignore ban-types
 type Handler = Function;
