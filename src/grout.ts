@@ -6,7 +6,7 @@ const logger = getLogger("grout:grout");
 
 // Special variables are $body, $request, $session, $user
 
-export type Controller = { base?: string };
+export type Controller = { base: string };
 
 // deno-lint-ignore ban-types
 type Handler = Function;
@@ -60,7 +60,7 @@ function getParameters(fn: Handler): { [name: string]: unknown } {
   return parameters;
 }
 
-export function extractRoutes(controller: Controller, base: string): Route[] {
+export function extractRoutes(controller: Controller, base = controller.base): Route[] {
   // Are they already in the cache?
   let routes = cache.get(controller);
   if (routes) return routes;
@@ -100,7 +100,7 @@ export function extractRoutes(controller: Controller, base: string): Route[] {
   return routes;
 }
 
-function matchRoute(controller: Controller, method: string, base: string, url: string) {
+function matchRoute(controller: Controller, method: string, url: string, base = controller.base) {
   const routes = extractRoutes(controller, base);
   for (const route of routes) {
     if (route.method !== method) continue;
@@ -110,7 +110,7 @@ function matchRoute(controller: Controller, method: string, base: string, url: s
   return undefined;
 }
 
-function countRoutes(controller: Controller, base: string, url: string): number {
+function countRoutes(controller: Controller, url: string, base = controller.base): number {
   const routes = extractRoutes(controller, base);
   let count = 0;
   for (const route of routes) {
@@ -183,12 +183,12 @@ export function setCurrentUserChecker<U>(cuc: (request: Request) => Promise<U | 
   currentUserChecker = cuc;
 }
 
-export async function loadControllers(path: string): Promise<Map<string, { new (): Controller }>> {
+export async function loadControllers(path: string, suffix = ".ts"): Promise<Map<string, { new (): Controller }>> {
   const map = new Map<string, { new (): Controller }>();
   const base = new URL(path, import.meta.url);
   const files = Deno.readDirSync(base);
   for (const file of files) {
-    if (!file.isFile || !file.name.endsWith(".ts")) continue;
+    if (!file.isFile || !file.name.endsWith(suffix)) continue;
     const url = new URL(base + "/" + file.name);
     const module = await import(url.toString());
     map.set(file.name, module.default);
@@ -198,16 +198,15 @@ export async function loadControllers(path: string): Promise<Map<string, { new (
 }
 
 // Will return a middleware that takes `ctx` as a single parameter
-// deno-lint-ignore ban-types
-export async function handle<T extends Object & Controller>(controller: T, request: Request, base?: string) {
+export async function handle<T extends Controller>(controller: T, request: Request, base = controller.base) {
   let ct = contentType("json");
 
   // If there is no base, assign the kebab version of the controller name
   if (!base) base = "/" + kebabCase(controller.constructor.name);
 
   // Get a matching route
-  const route = matchRoute(controller, request.method, base, request.url);
-  if (!route && countRoutes(controller, base, request.url)) {
+  const route = matchRoute(controller, request.method, request.url, base);
+  if (!route && countRoutes(controller, request.url, base)) {
     const status = Status.MethodNotAllowed;
     const error = "A route exists for this URL, but not for method '" + request.method + "'";
     logger.warning({ method: "handle", httpMethod: request.method, route: route, status });
