@@ -29,11 +29,12 @@ export class UserController {
   }
 
   // GET /users
-  get() {
-    return users.filter((u) => !u.admin);
+  get(sort = false) {
+    const fn = (a: User, b: User) => sort ? a.name.localeCompare(b.name) : 1;
+    return users.filter((u) => !u.admin).toSorted(fn)
   }
 
-  // GET /users/admins
+  // GET /admins
   get_admins($user: string) {
     // Requires authenticated admin user to proceed
     const admin = this.find($user)?.admin;
@@ -93,7 +94,7 @@ export class UserController {
   }
 
   // GET /users/:id/avatar.png
-  get_$id_avatar$$png(id = -1) {
+  get_$id_avatar_$_png(id = -1) {
     if (!users.find((u) => u.id === id)) throw new Deno.errors.NotFound();
     // deno-fmt-ignore
     const png = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABZSURBVDhPYxgFtAXsQNwHxPOAmB8kQCpIB+JlQAwypA0kQCrQB+J7UOwOEiAV2APxaSC+DcT+IAFSAMj/74DYHIjVgfgaEINcRDQAafyPhsOBeBRQHzAwAACMiw6sN2ANVQAAAABJRU5ErkJggg==";

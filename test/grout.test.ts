@@ -35,6 +35,16 @@ test("list", async () => {
   assertEquals(data, [{ id: 1, name: "John" }, { id: 2, name: "Jane" }, { id: 3, name: "Patrick" }]);
 });
 
+test("list sorted", async () => {
+  const { status, data } = await fetcher.go("GET", "/users?sort=true");
+  assertEquals(status, Status.OK);
+  assertEquals(data, [{ id: 2, name: "Jane" }, { id: 1, name: "John" }, { id: 3, name: "Patrick" }]);
+
+  // Make sure that 'false' also works!
+  const response = await fetcher.go("GET", "/users?sort=false");
+  assertEquals(response.data, [{ id: 1, name: "John" }, { id: 2, name: "Jane" }, { id: 3, name: "Patrick" }]);
+});
+
 // Listing all users via GET /users
 // NOTE: This is also testing specificy of routes (i.e. /users/admins is more specific than /users:id)
 test("admins", async () => {

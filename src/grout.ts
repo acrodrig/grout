@@ -91,7 +91,7 @@ export function extractRoutes(controller: Controller, base = controller.base): R
     const handler = property as Handler;
 
     // Split the function name and gather its pieces
-    const parts = name.replace("$$", ".").replace("$", ":").split("_");
+    const parts = name.replace("_$_", ".").replace("$", ":").split("_");
     const method = parts.shift()!.toUpperCase();
 
     // Route is only valid if it starts with a valid method
@@ -213,7 +213,7 @@ export async function loadControllers(path: string, suffix = ".ts"): Promise<Map
 }
 
 // Will return a middleware that takes `ctx` as a single parameter
-export async function handle<T extends Controller>(controller: T, request: Request, base = controller.base) {
+export async function handle<T extends Controller>(controller: T, request: Request, base = controller.base, quiet = false) {
   let ct = contentType("json");
 
   // If there is no base, assign the kebab version of the controller name
@@ -232,6 +232,13 @@ export async function handle<T extends Controller>(controller: T, request: Reque
   const match = route.pattern.exec(request.url);
   const functionParameters: Record<string, unknown> = route.parameters;
   const requestParameters: Record<string, unknown> = Object.assign({}, match?.search.groups, match?.pathname.groups);
+
+  // Add query parameters
+  const usp = new URL(request.url).searchParams;
+  for (const [name, value] of usp) {
+    if (name in requestParameters) continue;
+    requestParameters[name] = value;
+  }
 
   // Assign request
   requestParameters.$request = request;
@@ -270,6 +277,8 @@ export async function handle<T extends Controller>(controller: T, request: Reque
     // Contruct response
     return new Response(body, { status: Status.OK, headers: { "content-type": ct } });
   } catch (ex) {
+    if (!quiet && ex.message) console.warn("⚠️  [GROUT] "+ex.message);
+
     // Assign default status if we are here
     let status = Status.InternalServerError;
     if (ex instanceof Deno.errors.AlreadyExists) status = Status.Conflict;
