@@ -77,10 +77,15 @@ export function extractRoutes(controller: Controller, base = controller.base): R
 
   // Initialize to an empty array
   routes = [];
-  // const proto = Object.getPrototypeOf(controller);
-  const protoNames = Object.getOwnPropertyNames(Object.getPrototypeOf(controller));
-  const ownNames = Object.getOwnPropertyNames(controller);
-  for (const name of Object.assign(protoNames, ownNames)) {
+
+  // Get the prototype names (all) and add the owned names
+  const names = Object.getOwnPropertyNames(Object.getPrototypeOf(controller));
+  for (const on of Object.getOwnPropertyNames(controller)) {
+    if (!names.includes(on)) names.push(on);
+  }
+
+  // Iterate over all names
+  for (const name of names) {
     const property = (controller as any)[name];
     if (name === "constructor" || !(property instanceof Function)) continue;
     const handler = property as Handler;
