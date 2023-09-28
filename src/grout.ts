@@ -2,8 +2,6 @@ import { getLogger } from "std/log/mod.ts";
 import { isHttpMethod, Status } from "std/http/mod.ts";
 import { contentType } from "std/media_types/mod.ts";
 
-const logger = getLogger("grout:grout");
-
 // Special variables are $body, $request, $session, $user
 
 export type Controller = {
@@ -138,6 +136,8 @@ function validate(requestParameters: Record<string, unknown>, functionParameters
   // Will store the final parameters
   const parameters = Object.assign({}, functionParameters);
 
+  const logger = getLogger("grout");
+
   // Check that all parameters are defined
   for (const fpn of Object.keys(functionParameters)) {
     const fpv = functionParameters[fpn];
@@ -219,6 +219,8 @@ export async function handle<T extends Controller>(controller: T, request: Reque
   // If there is no base, assign the kebab version of the controller name
   if (!base) base = "/" + kebabCase(controller.constructor.name);
 
+  const logger = getLogger("grout");
+
   // Get a matching route
   const route = matchRoute(controller, request.method, request.url, base);
   if (!route && countRoutes(controller, request.url, base)) {
@@ -228,6 +230,9 @@ export async function handle<T extends Controller>(controller: T, request: Reque
     return new Response(JSON.stringify({ message: error }), { status, headers: { "content-type": ct } });
   }
   if (!route) return undefined;
+
+  // Print debugging message of current route
+  logger.debug({ method: "handle", httpMethod: request.method, route: route });
 
   const match = route.pattern.exec(request.url);
   const functionParameters: Record<string, unknown> = route.parameters;
@@ -277,7 +282,7 @@ export async function handle<T extends Controller>(controller: T, request: Reque
     // Contruct response
     return new Response(body, { status: Status.OK, headers: { "content-type": ct } });
   } catch (ex) {
-    if (!quiet && ex.message) console.warn("⚠️  [GROUT] "+ex.message);
+    if (!quiet && ex.message) console.warn("⚠️  [GROUT] " + ex.message);
 
     // Assign default status if we are here
     let status = Status.InternalServerError;
@@ -291,8 +296,7 @@ export async function handle<T extends Controller>(controller: T, request: Reque
     if (status === Status.InternalServerError) {
       logger.error(log);
       console.error(ex);
-    }
-    else logger.warning(log);
+    } else logger.warning(log);
 
     return new Response(JSON.stringify(ex), { status, headers: { "content-type": ct } });
   }

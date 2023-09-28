@@ -31,7 +31,7 @@ export class UserController {
   // GET /users
   get(sort = false) {
     const fn = (a: User, b: User) => sort ? a.name.localeCompare(b.name) : 1;
-    return users.filter((u) => !u.admin).toSorted(fn)
+    return users.filter((u) => !u.admin).toSorted(fn);
   }
 
   // GET /admins
