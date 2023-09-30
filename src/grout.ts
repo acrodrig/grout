@@ -249,7 +249,8 @@ export async function handle<T extends Controller>(controller: T, request: Reque
   requestParameters.$request = request;
 
   // Extract extension
-  const parts = request.url.split(".");
+  const pathname = new URL(request.url).pathname;
+  const parts = pathname.split(".");
   const extension = parts.length > 1 ? parts.pop() : undefined;
 
   // Add special variables "body" if needed
