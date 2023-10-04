@@ -225,11 +225,17 @@ export async function handle<T extends Controller>(controller: T, request: Reque
   const route = matchRoute(controller, request.method, request.url, base);
   if (!route && countRoutes(controller, request.url, base)) {
     const status = Status.MethodNotAllowed;
-    const error = "A route exists for this URL, but not for method '" + request.method + "'";
-    logger.warning({ method: "handle", httpMethod: request.method, route: route, status });
-    return new Response(JSON.stringify({ message: error }), { status, headers: { "content-type": ct } });
+    const message = "A route exists for this URL, but not for method '" + request.method + "'";
+    logger.warning({ method: "handle", httpMethod: request.method, status, message });
+    return new Response(JSON.stringify({ message }), { status, headers: { "content-type": ct } });
   }
-  if (!route) return undefined;
+  if (!route) {
+    const pathname = new URL(request.url).pathname;
+    const status = Status.MethodNotAllowed;
+    const message = "A controller exists, but no method/route for pathname '" + request.method + " " + pathname + "'";
+    logger.warning({ method: "handle", httpMethod: request.method, message });
+    return new Response(JSON.stringify({ message }), { status, headers: { "content-type": ct } });
+  }
 
   // Print debugging message of current route
   logger.debug({ method: "handle", httpMethod: request.method, route: route });
