@@ -11,11 +11,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Check out the code and steup deno with latest stable version
+      # Check out the code and setup deno with latest stable version
       - uses: actions/checkout@v3
       - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
 
-      # Run all test files in the repository and collect code coverage
+      # Run testsm collect code coverage and generate report from the collected coverage
       - run: deno test --allow-all --coverage=cov/
       - run: deno coverage --lcov cov/ > cov.lcov
 
@@ -24,6 +26,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: cov.lcov
+          fail_ci_if_error: true
 
       # Check that code is correctly formatted
       # TODO: Format code and commit back (see https://mskelton.medium.com/ed458f58b7df)
