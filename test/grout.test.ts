@@ -3,16 +3,16 @@
 // Corresponds to https://github.com/typestack/routing-controllers/blob/develop/test/functional/json-controller-methods.spec.ts
 
 import { Status } from "std/http/mod.ts";
-import { assertEquals } from "std/assert/mod.ts";
-import { handle, setCurrentUserChecker } from "../src/grout.ts";
+import { assertEquals, assertExists } from "std/assert/mod.ts";
+import { Controller, handle, loadControllers, setCurrentUserChecker } from "../src/grout.ts";
 import { Fetcher } from "./helpers.ts";
-import { UserController } from "./user.controller.ts";
+import UsersController from "./users.controller.ts";
 
 const test = Deno.test;
 
 const PORT = 8378;
 
-const controller = new UserController();
+const controller = new UsersController() as Controller;
 
 // Set user checker function
 setCurrentUserChecker<string>((request: Request) => {
@@ -140,7 +140,7 @@ test("nonExistant", async () => {
   assertEquals(status, Status.NotImplemented);
 });
 
-// Gets an image via an extension controller method (see method 'get_$id_avatar$$png' in file 'user.controller.ts')
+// Gets an image via an extension controller method (see method 'get_$id_avatar$$png' in file 'users.controller.ts')
 test("image", async () => {
   const { status, headers } = await fetcher.go("GET", "/users/0/avatar.png");
   assertEquals(status, Status.OK);
@@ -173,4 +173,15 @@ test.ignore("get multiple", async () => {
   const { status, data } = await fetcher.go("GET", "/users/multiple?ids=abc");
   assertEquals(status, Status.OK);
   assertEquals(data, [{ id: 2, name: "Janet" }, { id: 3, name: "Pat" }]);
+});
+
+// Gets multiple users via GET /users/multiple
+test("load", async () => {
+  const dir = new URL(".", import.meta.url);
+  const controllers = await loadControllers(dir.toString(), ".controller.ts");
+  assertEquals(controllers.size, 1);
+  assertExists(controllers.get("/users"));
+  const classes = await loadControllers(dir.toString(), ".controller.ts", true);
+  assertEquals(classes.size, 1);
+  assertExists(classes.get("users.controller.ts"));
 });

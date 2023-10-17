@@ -20,7 +20,7 @@ To use simple import the "https://deno.land/x/grout/mod.ts" url. Added bonus: no
 
 ## Example of usage
 
-See file `user.controller.ts` below. It will be a somewhat functional (albeit naïve) in-memory database of users. Below is a very simplified version of the controller used in tests. The controller declares REST routes via the name of the method and path parameters start with `$` (as in `delete_$id`).
+See file `users.controller.ts` below. It will be a somewhat functional (albeit naïve) in-memory database of users. Below is a very simplified version of the controller used in tests. The controller declares REST routes via the name of the method and path parameters start with `$` (as in `delete_$id`).
 
 Methods are defined according to the following grammar (`_` transforms into `/`, `$parama` into `:param` and `$$ext` into `.ext`).
 

@@ -8,7 +8,7 @@ export type Controller = {
   /**
    * Indicates the base path for all routes in this controller
    */
-  base: string;
+  base?: string;
 
   /**
    * Indicates if the controller is open (i.e. no authentication required)
@@ -198,22 +198,40 @@ export function setCurrentUserChecker<U>(cuc: (request: Request) => Promise<U | 
   currentUserChecker = cuc;
 }
 
-export async function loadControllers(path: string, suffix = ".ts"): Promise<Map<string, { new (): Controller }>> {
-  const map = new Map<string, { new (): Controller }>();
+/**
+ * Load all controllers inside a directory and return a map of controller name to controller instance.
+ *
+ * @param path - Directory where to look for controllers
+ * @param suffix - Suffix of the controller files. Everything before the suffix will be used as the controller name
+ * @param classes - If false, returns map of controller name to instance. Otherwise, returns map of file name to controller class
+ */
+export function loadControllers(path: string, suffix?: string, classes?: false): Promise<Map<string, Controller>>;
+export function loadControllers(path: string, suffix?: string, classes?: true): Promise<Map<string, { new (): Controller }>>;
+export async function loadControllers(path: string, suffix = ".ts", classes?: boolean): Promise<Map<string, Controller | { new (): Controller }>> {
+  const map = new Map<string, Controller | { new (): Controller }>();
   const base = new URL(path, import.meta.url);
   const files = Deno.readDirSync(base);
   for (const file of files) {
     if (!file.isFile || !file.name.endsWith(suffix)) continue;
     const url = new URL(base + "/" + file.name);
+
+    // Load module
     const module = await import(url.toString());
-    map.set(file.name, module.default);
     if (!module) throw new Error(`No module for controller file '${file.name}'`);
+
+    // Build controller and add it to the map
+    if (classes) map.set(file.name, module.default);
+    else {
+      const controller = (new module.default()) as Controller;
+      const name = controller.base ?? file.name.substring(0, file.name.length - suffix.length);
+      map.set(name.startsWith("/") ? name : "/" + name, controller);
+    }
   }
   return map;
 }
 
 // Will return a middleware that takes `ctx` as a single parameter
-export async function handle<T extends Controller>(controller: T, request: Request, base = controller.base, quiet = false) {
+async function handleOne<T extends Controller>(controller: T, request: Request, base = controller.base, quiet = false) {
   let ct = contentType("json");
 
   // If there is no base, assign the kebab version of the controller name
@@ -306,4 +324,28 @@ export async function handle<T extends Controller>(controller: T, request: Reque
 
     return new Response(JSON.stringify(ex), { status, headers: { "content-type": ct } });
   }
+}
+
+function handleMany(controllers: Map<string, Controller>, request: Request, globalPrefix = "", quiet = false): Promise<Response | undefined> {
+  // Get the prefix to the request and handle appropriately
+  const url = new URL(request.url);
+  if (url.pathname.startsWith(globalPrefix)) return Promise.resolve(undefined);
+
+  // Iterate over all controllers
+  const pn = url.pathname.substring(globalPrefix.length);
+  const base = Array.from(controllers.keys()).find((b) => pn.startsWith(b));
+
+  // If there is no base, we are done
+  if (!base) return Promise.resolve(undefined);
+
+  // Otherwise use 'handleOne' for the individual controller
+  const controller = controllers.get(base);
+  return handleOne(controller!, request, globalPrefix + base);
+}
+
+export function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, prefix = "", quiet = false): Promise<Response | undefined> {
+  const many = controllerOrControllers instanceof Map;
+  if (many) handleMany(controllerOrControllers, request, prefix, quiet);
+  else return handleOne(controllerOrControllers, request, prefix, quiet);
+  return Promise.resolve(undefined);
 }

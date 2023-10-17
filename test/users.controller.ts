@@ -12,8 +12,7 @@ const users: User[] = [
   { id: 3, name: "Patrick" },
 ];
 
-export class UserController {
-  base = "";
+export default class UsersController {
 
   // Helper method to find a user by name
   find(name: string) {
