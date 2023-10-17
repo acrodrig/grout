@@ -101,7 +101,7 @@ export function extractRoutes(controller: Controller, base = controller.base): R
     routes.push({ pathname, method, pattern, handler, parameters });
   }
 
-  // More specific routes (with less parameters) should be first, longer routes should be first
+  // More specific routes (with fewer parameters) should be first, longer routes should be first
   routes.sort((r1, r2) => {
     const p1 = r1.pathname.split(":").length - 1;
     const p2 = r2.pathname.split(":").length - 1;
@@ -223,19 +223,18 @@ export async function handle<T extends Controller>(controller: T, request: Reque
 
   // Get a matching route
   const route = matchRoute(controller, request.method, request.url, base);
-  if (!route && countRoutes(controller, request.url, base)) {
+
+  // If there is no route, but there are routes for this controller, then it is a 405 / MethodNotAllowed
+  if (!route && countRoutes(controller, request.url, base) > 0) {
     const status = Status.MethodNotAllowed;
     const message = "A route exists for this URL, but not for method '" + request.method + "'";
     logger.warning({ method: "handle", httpMethod: request.method, status, message });
     return new Response(JSON.stringify({ message }), { status, headers: { "content-type": ct } });
   }
-  if (!route) {
-    const pathname = new URL(request.url).pathname;
-    const status = Status.MethodNotAllowed;
-    const message = "A controller exists, but no method/route for pathname '" + request.method + " " + pathname + "'";
-    logger.warning({ method: "handle", httpMethod: request.method, message });
-    return new Response(JSON.stringify({ message }), { status, headers: { "content-type": ct } });
-  }
+
+  // If there is no route, then we should refuse to take care of this request, returning
+  // 'undefined' which means that the next middleware will be called
+  if (!route) return undefined;
 
   // Print debugging message of current route
   logger.debug({ method: "handle", httpMethod: request.method, route: route });

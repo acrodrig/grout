@@ -4,7 +4,8 @@
     "include": ["src/", "test/"]
   },
   "imports": {
-    "std/": "https://deno.land/std@0.201.0/"
+    "std/": "https://deno.land/std@0.204.0/",
+    "swc/": "https://deno.land/x/swc@0.2.1/"
   },
   "tasks": {
     "check": "deno check **/*.ts && deno fmt --check",

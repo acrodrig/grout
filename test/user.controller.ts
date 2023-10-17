@@ -34,12 +34,18 @@ export class UserController {
     return users.filter((u) => !u.admin).toSorted(fn);
   }
 
-  // GET /admins
+  // GET /users/admins
   get_admins($user: string) {
     // Requires authenticated admin user to proceed
     const admin = this.find($user)?.admin;
     if (!admin) throw new Deno.errors.PermissionDenied();
     return users.filter((u) => u.admin);
+  }
+
+  // GET /users/multiple
+  // WARNING: WILL ONLY WORK WITH TYPES!
+  get_multiple(ids: number[]) {
+    return users.filter((u) => ids.includes(u.id));
   }
 
   // GET /users/:id

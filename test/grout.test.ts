@@ -167,3 +167,10 @@ test("invalid", async () => {
   const { status } = await fetcher.go("GET", "/find?{ name: 'Peter' }");
   assertEquals(status, Status.NotImplemented);
 });
+
+// Gets multiple users via GET /users/multiple
+test.ignore("get multiple", async () => {
+  const { status, data } = await fetcher.go("GET", "/users/multiple?ids=abc");
+  assertEquals(status, Status.OK);
+  assertEquals(data, [{ id: 2, name: "Janet" }, { id: 3, name: "Pat" }]);
+});

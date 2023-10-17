@@ -1,0 +1,38 @@
+# See https://deno.land/manual/advanced/continuous_integration
+
+on: [push,pull_request]
+
+# Set DENO_DIR to an absolute or relative path on the runner.
+env:
+  DENO_AUTH_TOKENS: ${{ secrets.DENO_AUTH_TOKENS }}
+  DENO_DIR: cache
+
+jobs:
+  build:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the code
+      - uses: actions/checkout@v3
+
+      # Setup deno with latest stable version
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      # Run all test files in the repository and collect code coverage
+      - run: deno test --allow-all --coverage=cov/
+
+      # This generates a report from the collected coverage
+      - run: deno coverage --lcov cov/ > cov.lcov
+
+      # Upload to Codecov (see https://github.com/marketplace/actions/codecov)
+      - uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: cov.lcov
+          flags: unittests
+          fail_ci_if_error: true
+
+      # Format code and commit back (see https://mskelton.medium.com/auto-formatting-code-using-prettier-and-github-actions-ed458f58b7df)
+      - run: deno fmt --options-line-width 180 --check src test
