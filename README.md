@@ -209,3 +209,10 @@ Use method `loadControllers` which returns a map of controllers.
 - [ ] Implement interceptors
 - [ ] Provide examples of session, user, headers parameters
 
+## Miscellaneous
+
+To make sure that Github can Codecov can talk, you need to set the `CODECOV_TOKEN` environment variable in the Github repository settings:
+
+```bash
+gh secret set CODECOV_TOKEN --body "$CODECOV_TOKEN"
+```
