@@ -13,7 +13,6 @@ const users: User[] = [
 ];
 
 export default class UsersController {
-
   // Helper method to find a user by name
   find(name: string) {
     return users.find((u) => u.name === name);
