@@ -3,6 +3,7 @@
     "lineWidth": 180,
     "include": ["src/", "test/"]
   },
+  "lock": false,
   "imports": {
     "std/": "https://deno.land/std@0.204.0/",
     "swc/": "https://deno.land/x/swc@0.2.1/"
