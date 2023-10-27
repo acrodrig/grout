@@ -278,7 +278,10 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
 
   // Add special variables "body" if needed
   if (Object.hasOwn(functionParameters, "$body")) {
-    requestParameters.$body = await request.json();
+    const ct = request.headers.get("content-type") ?? "application/json";
+    if (ct.startsWith("application/json")) requestParameters.$body = await request.json();
+    else if (ct.startsWith("application/x-www-form-urlencoded")) requestParameters.$body = Object.fromEntries(await request.formData());
+    else requestParameters.$body = await request.text();
   }
 
   // Now user if applicable
@@ -297,9 +300,12 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
     let body = await route.handler.apply(controller, Object.values(parameters));
     if (body instanceof Response) return body;
 
+    // Test if something is HTML
+    const isHTML = RegExp.prototype.test.bind(/(<[-_.A-Za-z0-9]+).+>/i);
+
     // Assign content type depending on the extension and/or body
     if (extension) ct = contentType(extension) ?? extension;
-    else if (typeof body === "string") ct = contentType("html");
+    else if (typeof body === "string") ct = contentType(isHTML(body) ? "html" : "text");
     else if (body instanceof ArrayBuffer) ct = contentType("bin");
     else body = JSON.stringify(body);
 
@@ -329,7 +335,7 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
 function handleMany(controllers: Map<string, Controller>, request: Request, globalPrefix = "", quiet = false): Promise<Response | undefined> {
   // Get the prefix to the request and handle appropriately
   const url = new URL(request.url);
-  if (url.pathname.startsWith(globalPrefix)) return Promise.resolve(undefined);
+  if (!url.pathname.startsWith(globalPrefix)) return Promise.resolve(undefined);
 
   // Iterate over all controllers
   const pn = url.pathname.substring(globalPrefix.length);
@@ -345,7 +351,6 @@ function handleMany(controllers: Map<string, Controller>, request: Request, glob
 
 export function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, prefix = "", quiet = false): Promise<Response | undefined> {
   const many = controllerOrControllers instanceof Map;
-  if (many) handleMany(controllerOrControllers, request, prefix, quiet);
+  if (many) return handleMany(controllerOrControllers, request, prefix, quiet);
   else return handleOne(controllerOrControllers, request, prefix, quiet);
-  return Promise.resolve(undefined);
 }

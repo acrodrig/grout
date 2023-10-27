@@ -19,12 +19,12 @@ export class Fetcher {
     this.base = base;
   }
 
-  async go(method: string, url: string, data?: string | JsonValue, logOff = false, headers = {}): Promise<Response> {
+  async go(method: string, url: string, data?: string | URLSearchParams | JsonValue, logOff = false, headers = {}): Promise<Response> {
     const log = getLogger("grout");
     if (logOff) log.levelName = "CRITICAL";
-    headers = Object.assign({ "Content-Type": typeof data !== "string" ? "text/plain" : "application/json" }, headers);
+    headers = Object.assign({ "content-Type": typeof data === "string" ? "text/plain" : "application/json" }, headers);
     const options: RequestInit = { method, headers };
-    options.body = typeof data === "string" ? data : JSON.stringify(data);
+    options.body = typeof data === "string" || data instanceof URLSearchParams ? data : JSON.stringify(data);
     const response = await fetch(new URL(url, this.base), options);
     if (response.status === 204 || options.method === "HEAD") response.data = "";
     else if (response.headers.get("Content-Type")?.includes("application/json")) response.data = await response.json();

@@ -106,7 +106,7 @@ test("patch", async () => {
   assertEquals(data, { id: 2, status: "patched" });
 });
 
-// Creatint a new user (Peter) with POST
+// Creating a new user (Peter) with POST
 test("post", async () => {
   const { status, data } = await fetcher.go("POST", "/users", { name: "Peter" });
   assertEquals(status, Status.OK);
@@ -184,4 +184,15 @@ test("load", async () => {
   const classes = await loadControllers(dir.toString(), ".controller.ts", true);
   assertEquals(classes.size, 1);
   assertExists(classes.get("users.controller.ts"));
+});
+
+// Creating a new user (Mark) with POST and "application/x-www-form-urlencoded"
+test("post", async () => {
+  const headers = { "content-Type": "application/x-www-form-urlencoded" };
+  const { status, data } = await fetcher.go("POST", "/users", new URLSearchParams({ name: "Mark", admin: "false" }), false, headers);
+  assertEquals(status, Status.OK);
+  assertEquals(data, { id: 5, status: "posted" });
+
+  // Make sure the user was created with the right values
+  assertEquals((await fetcher.go("GET", "/users/5")).data, { id: 5, name: "Mark", admin: "false" });
 });
