@@ -1,8 +1,11 @@
 import { getLogger } from "std/log/mod.ts";
-import { isHttpMethod, Status } from "std/http/mod.ts";
+import { STATUS_CODE } from "std/http/mod.ts";
 import { contentType } from "std/media_types/mod.ts";
+import { getParametersFromSource, getParametersFromAST } from "./reflection.ts";
 
 // Special variables are $body, $request, $session, $user
+
+const HTTP_METHODS = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"];
 
 export type Controller = {
   /**
@@ -19,6 +22,28 @@ export type Controller = {
 // deno-lint-ignore ban-types
 type Handler = Function;
 
+// See https://github.com/denoland/deno_std/blob/0.221.0/json/common.ts
+// See https://github.com/ts-essentials/ts-essentials/blob/master/lib/primitive/index.ts
+type Value = bigint | boolean | null | number | string | symbol | { [key: string]: Value | undefined } | Value[];
+
+export interface Schema {
+  $id: string;
+  type?: string;
+  description?: string;
+  properties: Record<string, Property>;
+  required: string[];
+  additionalProperties?: boolean;
+}
+
+export interface Property {
+  type: string;
+  description?: string;
+  default?: Value | undefined;
+  enum?: (string | number)[];
+  items?: { type: string };
+  minimum?: number;
+}
+
 /**
  * Route embedded in class method
  */
@@ -27,45 +52,14 @@ type Route = {
   method: string;
   pattern: URLPattern;
   handler: Handler;
-  parameters: Record<string, unknown>;
+  schema: Schema;
 };
 
+let getParameters: (fn: Function) => Schema | undefined;
 const cache = new Map<Controller, Route[]>();
 
 function kebabCase(value: string): string {
   return value.replace(/([A-Z])/g, (match: string) => "-" + match.toLowerCase());
-}
-
-// Using balanced parenthesis
-function getParameters(fn: Handler): { [name: string]: unknown } {
-  let source = fn.toString();
-
-  // Remove comments /* ... */ and //
-  source = source.replace(/(\/\*[\s\S]*?\*\/)|(\/\/(.)*)/g, "");
-
-  // Find first parenthesis and then go to the end making sure we balance them
-  const s = source.indexOf("(") + 1;
-  let e = s, count = 1;
-  for (; e < source.length; e++) {
-    const char = source.charAt(e);
-    if (char == "(") count++;
-    if (char == ")") count--;
-    if (count === 0) break;
-  }
-
-  // Get parameters, build parameters
-  const tokens = source.substring(s, e).split(","), parameters: { [key: string]: unknown } = {};
-
-  // Extract defaults
-  for (const token of tokens) {
-    const p = token.indexOf("=");
-    const potentialValue = token.substring(p + 1).trim();
-    const name = p === -1 ? token.trim() : token.substring(0, p).trim();
-    const value = p === -1 || potentialValue === "undefined" ? undefined : JSON.parse(potentialValue);
-    if (name) parameters[name] = value;
-  }
-
-  return parameters;
 }
 
 export function extractRoutes(controller: Controller, base = controller.base): Route[] {
@@ -93,12 +87,12 @@ export function extractRoutes(controller: Controller, base = controller.base): R
     const method = parts.shift()!.toUpperCase();
 
     // Route is only valid if it starts with a valid method
-    if (!isHttpMethod(method)) continue;
+    if (!HTTP_METHODS.includes(method)) continue;
 
     const pathname = base + (parts.length ? "/" : "") + parts.join("/");
     const pattern = new URLPattern({ pathname });
-    const parameters = getParameters(handler);
-    routes.push({ pathname, method, pattern, handler, parameters });
+    const schema = getParameters(handler)!;
+    routes.push({ pathname, method, pattern, handler, schema });
   }
 
   // More specific routes (with fewer parameters) should be first, longer routes should be first
@@ -132,33 +126,34 @@ function countRoutes(controller: Controller, url: string, base = controller.base
   return count;
 }
 
-function validate(requestParameters: Record<string, unknown>, functionParameters: Record<string, unknown>): Record<string, unknown> {
+function validate(requestParameters: Record<string, unknown>, properties: Record<string, Property>): Record<string, unknown> {
   // Will store the final parameters
-  const parameters = Object.assign({}, functionParameters);
+  const defaultValues = Object.fromEntries(Object.entries(properties).map(([k, v]) => [k, v.default]));
+  const parameters = Object.assign({}, defaultValues);
 
   const logger = getLogger("grout");
 
   // Check that all parameters are defined
-  for (const fpn of Object.keys(functionParameters)) {
-    const fpv = functionParameters[fpn];
+  for (const fpn of Object.keys(defaultValues)) {
+    const fpv = defaultValues[fpn];
     const rpv = requestParameters[fpn] || requestParameters[kebabCase(fpn)];
 
     // Check if the parameter is required
     if (fpv === undefined && rpv === undefined) {
-      logger.warning({ method: "validate", parameter: fpn, condition: "REQUIRED" });
+      logger.warn({ method: "validate", parameter: fpn, condition: "REQUIRED" });
       throw new Deno.errors.InvalidData("Parameter '" + fpn + "' is required");
     }
 
     const isDefined = rpv !== undefined;
 
     // Simple case
-    parameters[fpn] = rpv;
+    parameters[fpn] = rpv as any;
 
     // Check if it is correctly a boolean
     if (typeof fpv === "boolean" && isDefined) {
       const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'boolean'";
       if (rpv !== "true" && rpv !== "false") {
-        logger.warning({ method: "validate", parameter: fpn, type: "boolean", value: rpv, status: Status.BadRequest });
+        logger.warn({ method: "validate", parameter: fpn, type: "boolean", value: rpv, status: STATUS_CODE.BadRequest });
         throw new Deno.errors.InvalidData(message);
       }
       parameters[fpn] = rpv === "true";
@@ -169,7 +164,7 @@ function validate(requestParameters: Record<string, unknown>, functionParameters
       const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'number'";
       const n = parseInt(String(rpv));
       if (Number.isNaN(n)) {
-        logger.warning({ method: "validate", parameter: fpn, type: "number", value: rpv, status: Status.BadRequest });
+        logger.warn({ method: "validate", parameter: fpn, type: "number", value: rpv, status: STATUS_CODE.BadRequest });
         throw new Deno.errors.InvalidData(message);
       }
       parameters[fpn] = n;
@@ -181,7 +176,7 @@ function validate(requestParameters: Record<string, unknown>, functionParameters
       try {
         parameters[fpn] = JSON.parse(String(rpv));
       } catch (_ex) {
-        logger.warning({ method: "validate", parameter: fpn, type: "object", value: rpv, status: Status.BadRequest });
+        logger.warn({ method: "validate", parameter: fpn, type: "object", value: rpv, status: STATUS_CODE.BadRequest });
         throw new Deno.errors.InvalidData(message);
       }
     }
@@ -244,9 +239,9 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
 
   // If there is no route, but there are routes for this controller, then it is a 405 / MethodNotAllowed
   if (!route && countRoutes(controller, request.url, base) > 0) {
-    const status = Status.MethodNotAllowed;
+    const status = STATUS_CODE.MethodNotAllowed;
     const message = "A route exists for this URL, but not for method '" + request.method + "'";
-    logger.warning({ method: "handle", httpMethod: request.method, status, message });
+    logger.warn({ method: "handle", httpMethod: request.method, status, message });
     return new Response(JSON.stringify({ message }), { status, headers: { "content-type": ct } });
   }
 
@@ -258,7 +253,7 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
   logger.debug({ method: "handle", httpMethod: request.method, route: route });
 
   const match = route.pattern.exec(request.url);
-  const functionParameters: Record<string, unknown> = route.parameters;
+  const functionParameters: Record<string, Property> = route.schema.properties;
   const requestParameters: Record<string, unknown> = Object.assign({}, match?.search.groups, match?.pathname.groups);
 
   // Add query parameters
@@ -310,23 +305,23 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
     else body = JSON.stringify(body);
 
     // Contruct response
-    return new Response(body, { status: Status.OK, headers: { "content-type": ct } });
+    return new Response(body, { status: STATUS_CODE.OK, headers: { "content-type": ct } });
   } catch (ex) {
     if (!quiet && ex.message) console.warn("⚠️  [GROUT] " + ex.message);
 
     // Assign default status if we are here
-    let status = Status.InternalServerError;
-    if (ex instanceof Deno.errors.AlreadyExists) status = Status.Conflict;
-    if (ex instanceof Deno.errors.InvalidData) status = Status.BadRequest;
-    if (ex instanceof Deno.errors.NotFound) status = Status.NotFound;
-    if (ex instanceof Deno.errors.NotSupported) status = Status.NotImplemented;
-    if (ex instanceof Deno.errors.PermissionDenied) status = Status.Unauthorized;
+    let status: number = STATUS_CODE.InternalServerError;
+    if (ex instanceof Deno.errors.AlreadyExists) status = STATUS_CODE.Conflict;
+    if (ex instanceof Deno.errors.InvalidData) status = STATUS_CODE.BadRequest;
+    if (ex instanceof Deno.errors.NotFound) status = STATUS_CODE.NotFound;
+    if (ex instanceof Deno.errors.NotSupported) status = STATUS_CODE.NotImplemented;
+    if (ex instanceof Deno.errors.PermissionDenied) status = STATUS_CODE.Unauthorized;
 
     const log = { method: "handle", httpMethod: request.method, route: route, status, message: ex.message };
-    if (status === Status.InternalServerError) {
+    if (status === STATUS_CODE.InternalServerError) {
       logger.error(log);
       console.error(ex);
-    } else logger.warning(log);
+    } else logger.warn(log);
 
     return new Response(JSON.stringify(ex), { status, headers: { "content-type": ct } });
   }
@@ -346,10 +341,15 @@ function handleMany(controllers: Map<string, Controller>, request: Request, glob
 
   // Otherwise use 'handleOne' for the individual controller
   const controller = controllers.get(base);
-  return handleOne(controller!, request, globalPrefix + base);
+  return handleOne(controller!, request, globalPrefix + base, quiet);
 }
 
-export function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, prefix = "", quiet = false): Promise<Response | undefined> {
+export function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, fileName?: string, prefix = "", quiet = false): Promise<Response | undefined> {
+  getParameters = (fn: Function) => {
+    const schema = fileName ? getParametersFromAST(fileName, fn) : getParametersFromSource(fn);
+    if (!schema && !quiet) console.warn("⚠️  [GROUT] Schema not found for function '" + fn.name + "' ");
+    return schema
+  };
   const many = controllerOrControllers instanceof Map;
   if (many) return handleMany(controllerOrControllers, request, prefix, quiet);
   else return handleOne(controllerOrControllers, request, prefix, quiet);

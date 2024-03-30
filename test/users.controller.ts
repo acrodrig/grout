@@ -41,7 +41,7 @@ export default class UsersController {
   }
 
   // GET /users/multiple
-  // WARNING: WILL ONLY WORK WITH TYPES!
+  // ⚠️ WARNING: WILL ONLY WORK WITH TYPES!
   get_multiple(ids: number[]) {
     return users.filter((u) => ids.includes(u.id));
   }

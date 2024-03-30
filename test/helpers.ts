@@ -1,10 +1,22 @@
 import { type JsonValue } from "std/json/mod.ts";
-import { getLogger, handlers, setup } from "std/log/mod.ts";
+import { ConsoleHandler, getLogger, setup } from "std/log/mod.ts";
+
+const PROVIDER = Deno.env.get("TEST_PROVIDER") ?? Deno.args[0];
+if (!PROVIDER) console.warn("\n⚠️  Assuming specification from TYPES provider. You can use 'TEST_PROVIDER=<provider>' or '-- <provider>' (source, types)\n");
 
 setup({
-  handlers: { console: new handlers.ConsoleHandler("DEBUG") },
+  handlers: { console: new ConsoleHandler("DEBUG") },
   loggers: { grout: { level: "INFO", handlers: ["console"] } },
 });
+
+export const getProvider = function () {
+  const provider = PROVIDER;
+  if (provider && !["source", "types"].includes(provider.toLowerCase())) {
+    console.error("\n❌ Specification provider '" + provider + "' does not exist!\n");
+    Deno.exit(1);
+  }
+  return (provider || "types").toLowerCase();
+};
 
 declare global {
   export interface Response {
