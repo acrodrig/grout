@@ -35,7 +35,7 @@ export function getParametersFromSource(fn: Function): Schema | undefined {
     const name = p === -1 ? token.trim() : token.substring(0, p).trim();
     const value = p === -1 || potentialValue === "undefined" ? undefined : JSON.parse(potentialValue);
     if (!name) continue;
-    const type = typeof(value);
+    const type = typeof value;
     const property = { type: type === "undefined" ? "any" : type } as Property;
     if (p !== -1) property["default"] = value;
     if (p === -1) schema.required.push(name);
@@ -57,7 +57,7 @@ export function getParametersFromAST(file: string, fn: Function): Schema | undef
   // Find function expression
   // const fe = sourceFile.getFunction(fn.name)!;
   let functionNode: FunctionDeclaration | FunctionExpression | MethodDeclaration | undefined;
-  sourceFile.forEachDescendant(node => {
+  sourceFile.forEachDescendant((node) => {
     if (functionNode) return;
     if (!(node instanceof FunctionDeclaration || node instanceof FunctionExpression || node instanceof MethodDeclaration)) return;
     if (node.getName() === fn.name) functionNode = node;

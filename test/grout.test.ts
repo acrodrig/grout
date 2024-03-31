@@ -22,7 +22,7 @@ setCurrentUserChecker<string>((request: Request) => {
 });
 
 Deno.serve({ port: PORT }, async (request: Request) => {
-  const fileName = getProvider() === "source" ? undefined : import.meta.dirname+"/users.controller.ts";
+  const fileName = getProvider() === "source" ? undefined : import.meta.dirname + "/users.controller.ts";
   const response = await handle(controller, request, fileName, "/users", true);
   return response ?? new Response("NOT IMPLEMENTED", { status: STATUS_CODE.NotImplemented });
 });

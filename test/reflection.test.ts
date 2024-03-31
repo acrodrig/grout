@@ -48,7 +48,7 @@ test("Simple From AST", function fromAST() {
   // Testing default values will guess correct type (note we transform arrow function)
   assertEquals(params(function ast5(_a = 1, _b = true) {}), { _a: { default: 1, type: "number" }, _b: { default: true, type: "boolean" } });
   assertEquals(params(function ast6(_a = 1, _b?: boolean) {}), { _a: { default: 1, type: "number" }, _b: { default: undefined, type: "boolean" } });
-  assertEquals(params(function ast7(a = "foo") { return a }), { a: { default: "foo", type: "string" } });
+  assertEquals(params(function ast7(a = "foo") {}), { a: { default: "foo", type: "string" } });
   assertEquals(params(function ast8(_a = 42) {}), { _a: { default: 42, type: "number" } });
 
   // Testing complex types

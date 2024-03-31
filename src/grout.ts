@@ -1,7 +1,7 @@
 import { getLogger } from "std/log/mod.ts";
 import { STATUS_CODE } from "std/http/mod.ts";
 import { contentType } from "std/media_types/mod.ts";
-import { getParametersFromSource, getParametersFromAST } from "./reflection.ts";
+import { getParametersFromAST, getParametersFromSource } from "./reflection.ts";
 
 // Special variables are $body, $request, $session, $user
 
@@ -344,13 +344,15 @@ function handleMany(controllers: Map<string, Controller>, request: Request, glob
   return handleOne(controller!, request, globalPrefix + base, quiet);
 }
 
-export function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, fileName?: string, prefix = "", quiet = false): Promise<Response | undefined> {
+function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, fileName?: string, prefix = "", quiet = false): Promise<Response | undefined> {
   getParameters = (fn: Function) => {
     const schema = fileName ? getParametersFromAST(fileName, fn) : getParametersFromSource(fn);
     if (!schema && !quiet) console.warn("⚠️  [GROUT] Schema not found for function '" + fn.name + "' ");
-    return schema
+    return schema;
   };
   const many = controllerOrControllers instanceof Map;
   if (many) return handleMany(controllerOrControllers, request, prefix, quiet);
   else return handleOne(controllerOrControllers, request, prefix, quiet);
 }
+
+export { handle };
