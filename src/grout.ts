@@ -1,7 +1,7 @@
 import { getLogger } from "std/log/mod.ts";
 import { STATUS_CODE } from "std/http/mod.ts";
 import { contentType } from "std/media_types/mod.ts";
-import { getParametersFromAST, getParametersFromSource } from "./reflection.ts";
+import { getParametersFromAST, getParametersFromSource, typeOf } from "./reflection.ts";
 
 // Special variables are $body, $request, $session, $user
 
@@ -12,6 +12,11 @@ export type Controller = {
    * Indicates the base path for all routes in this controller
    */
   base?: string;
+
+  /**
+   * URL from which the controller was loaded (could be a file URL)
+   */
+  url?: URL;
 
   /**
    * Indicates if the controller is open (i.e. no authentication required)
@@ -55,11 +60,21 @@ type Route = {
   schema: Schema;
 };
 
-let getParameters: (fn: Function) => Schema | undefined;
 const cache = new Map<Controller, Route[]>();
 
+// Utility function to convert camelCase to kebab-case
 function kebabCase(value: string): string {
   return value.replace(/([A-Z])/g, (match: string) => "-" + match.toLowerCase());
+}
+
+// Utility function to chop optional quotes surrounding a string
+function chopQuotes(value: string): string {
+  return value.replace(/^"(.*)"$/, "$1").replace(/^"(.*)"$/, "$1");
+}
+
+// Get parameters from AST or source
+function getParameters(fn: Function, fileName?: string) {
+  return fileName ? getParametersFromAST(fileName, fn) : getParametersFromSource(fn);
 }
 
 export function extractRoutes(controller: Controller, base = controller.base): Route[] {
@@ -91,7 +106,7 @@ export function extractRoutes(controller: Controller, base = controller.base): R
 
     const pathname = base + (parts.length ? "/" : "") + parts.join("/");
     const pattern = new URLPattern({ pathname });
-    const schema = getParameters(handler)!;
+    const schema = getParameters(handler, decodeURI(controller.url?.pathname ?? ""))!;
     routes.push({ pathname, method, pattern, handler, schema });
   }
 
@@ -126,58 +141,35 @@ function countRoutes(controller: Controller, url: string, base = controller.base
   return count;
 }
 
-function validate(requestParameters: Record<string, unknown>, properties: Record<string, Property>): Record<string, unknown> {
-  // Will store the final parameters
-  const defaultValues = Object.fromEntries(Object.entries(properties).map(([k, v]) => [k, v.default]));
-  const parameters = Object.assign({}, defaultValues);
-
+// Returns parameters to invoke handler with, and it will fill with defaults if needed
+// The `parameters` object is potentially full of the strings found in the URL
+function validate(parameters: Record<string, unknown>, schema: Schema): Record<string, unknown> {
   const logger = getLogger("grout");
 
   // Check that all parameters are defined
-  for (const fpn of Object.keys(defaultValues)) {
-    const fpv = defaultValues[fpn];
-    const rpv = requestParameters[fpn] || requestParameters[kebabCase(fpn)];
+  for (const name of Object.keys(schema.properties)) {
+    const property = schema.properties[name];
+    const defaultValue = property.default;
+    const value = parameters[name] ?? parameters[kebabCase(name)];
 
     // Check if the parameter is required
-    if (fpv === undefined && rpv === undefined) {
-      logger.warn({ method: "validate", parameter: fpn, condition: "REQUIRED" });
-      throw new Deno.errors.InvalidData("Parameter '" + fpn + "' is required");
+    if (schema.required.includes(name) && value === undefined) {
+      logger.warn({ method: "validate", parameter: name, condition: "REQUIRED" });
+      throw new Deno.errors.InvalidData("Parameter '" + name + "' is required");
     }
 
-    const isDefined = rpv !== undefined;
+    const expectedType = property.type;
 
-    // Simple case
-    parameters[fpn] = rpv as any;
-
-    // Check if it is correctly a boolean
-    if (typeof fpv === "boolean" && isDefined) {
-      const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'boolean'";
-      if (rpv !== "true" && rpv !== "false") {
-        logger.warn({ method: "validate", parameter: fpn, type: "boolean", value: rpv, status: STATUS_CODE.BadRequest });
-        throw new Deno.errors.InvalidData(message);
-      }
-      parameters[fpn] = rpv === "true";
-    }
-
-    // Check if it is correctly a number
-    if (typeof fpv === "number" && isDefined) {
-      const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'number'";
-      const n = parseInt(String(rpv));
-      if (Number.isNaN(n)) {
-        logger.warn({ method: "validate", parameter: fpn, type: "number", value: rpv, status: STATUS_CODE.BadRequest });
-        throw new Deno.errors.InvalidData(message);
-      }
-      parameters[fpn] = n;
-    }
-
-    // Check if it is correctly an object
-    if (typeof fpv === "object" && isDefined) {
-      const message = "Parameter '" + fpn + "' with value '" + rpv + "' is not of type 'object'";
+    if (value == undefined) parameters[name] = defaultValue;
+    else if (expectedType === "string") parameters[name] = chopQuotes(value as string);
+    else {
       try {
-        parameters[fpn] = JSON.parse(String(rpv));
+        parameters[name] = typeof(value) === "string" ? JSON.parse(value as string) : value;
       } catch (_ex) {
-        logger.warn({ method: "validate", parameter: fpn, type: "object", value: rpv, status: STATUS_CODE.BadRequest });
-        throw new Deno.errors.InvalidData(message);
+        logger.warn({ method: "validate", parameter: name, type: expectedType, value: value, status: STATUS_CODE.BadRequest });
+        // If we do not know the expected type, be lenient and assume a string
+        if (expectedType === "unknown") parameters[name] = chopQuotes(String(value));
+        else throw new Deno.errors.InvalidData("Parameter '" + name + "' with value '" + value + "' is not of type '" + expectedType + "'");
       }
     }
   }
@@ -219,6 +211,7 @@ export async function loadControllers(path: string, suffix = ".ts", classes?: bo
     else {
       const controller = (new module.default()) as Controller;
       const name = controller.base ?? file.name.substring(0, file.name.length - suffix.length);
+      controller.url = url;
       map.set(name.startsWith("/") ? name : "/" + name, controller);
     }
   }
@@ -253,18 +246,17 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
   logger.debug({ method: "handle", httpMethod: request.method, route: route });
 
   const match = route.pattern.exec(request.url);
-  const functionParameters: Record<string, Property> = route.schema.properties;
-  const requestParameters: Record<string, unknown> = Object.assign({}, match?.search.groups, match?.pathname.groups);
+  const parameters: Record<string, unknown> = Object.assign({}, match?.search.groups, match?.pathname.groups);
 
   // Add query parameters
   const usp = new URL(request.url).searchParams;
   for (const [name, value] of usp) {
-    if (name in requestParameters) continue;
-    requestParameters[name] = value;
+    if (name in parameters) continue;
+    parameters[name] = value;
   }
 
   // Assign request
-  requestParameters.$request = request;
+  parameters.$request = request;
 
   // Extract extension
   const pathname = new URL(request.url).pathname;
@@ -272,27 +264,28 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
   const extension = parts.length > 1 ? parts.pop() : undefined;
 
   // Add special variables "body" if needed
-  if (Object.hasOwn(functionParameters, "$body")) {
+  if (Object.hasOwn(route.schema.properties, "$body")) {
     const ct = request.headers.get("content-type") ?? "application/json";
-    if (ct.startsWith("application/json")) requestParameters.$body = await request.json();
-    else if (ct.startsWith("application/x-www-form-urlencoded")) requestParameters.$body = Object.fromEntries(await request.formData());
-    else requestParameters.$body = await request.text();
+    if (ct.startsWith("application/json")) parameters.$body = await request.json();
+    else if (ct.startsWith("application/x-www-form-urlencoded")) parameters.$body = Object.fromEntries(await request.formData());
+    else parameters.$body = await request.text();
   }
 
   // Now user if applicable
-  if (Object.hasOwn(functionParameters, "$user")) {
-    requestParameters.$user = await currentUserChecker(request);
+  if (Object.hasOwn(route.schema.properties, "$user")) {
+    parameters.$user = await currentUserChecker(request);
   }
 
   try {
     // Check that is it needs a user it has one!
-    if ("$user" in requestParameters && !requestParameters.$user) throw new Deno.errors.PermissionDenied();
+    if ("$user" in parameters && !parameters.$user) throw new Deno.errors.PermissionDenied();
 
     // Validate parameters
-    const parameters = validate(requestParameters, functionParameters!);
+    validate(parameters, route.schema);
 
     // Call the handler
-    let body = await route.handler.apply(controller, Object.values(parameters));
+    const parameterNames = Object.keys(route.schema.properties);
+    let body = await route.handler.apply(controller, parameterNames.map((name) => parameters[name]));
     if (body instanceof Response) return body;
 
     // Test if something is HTML
@@ -344,12 +337,7 @@ function handleMany(controllers: Map<string, Controller>, request: Request, glob
   return handleOne(controller!, request, globalPrefix + base, quiet);
 }
 
-function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, fileName?: string, prefix = "", quiet = false): Promise<Response | undefined> {
-  getParameters = (fn: Function) => {
-    const schema = fileName ? getParametersFromAST(fileName, fn) : getParametersFromSource(fn);
-    if (!schema && !quiet) console.warn("⚠️  [GROUT] Schema not found for function '" + fn.name + "' ");
-    return schema;
-  };
+function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, prefix = "", quiet = false): Promise<Response | undefined> {
   const many = controllerOrControllers instanceof Map;
   if (many) return handleMany(controllerOrControllers, request, prefix, quiet);
   else return handleOne(controllerOrControllers, request, prefix, quiet);

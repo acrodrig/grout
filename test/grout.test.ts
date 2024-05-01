@@ -22,8 +22,9 @@ setCurrentUserChecker<string>((request: Request) => {
 });
 
 Deno.serve({ port: PORT }, async (request: Request) => {
-  const fileName = getProvider() === "source" ? undefined : import.meta.dirname + "/users.controller.ts";
-  const response = await handle(controller, request, fileName, "/users", true);
+  // Set url so that it can be used to load the controller
+  if (getProvider() === "types") controller.url = new URL("users.controller.ts", import.meta.url);
+  const response = await handle(controller, request, "/users", true);
   return response ?? new Response("NOT IMPLEMENTED", { status: STATUS_CODE.NotImplemented });
 });
 
@@ -129,7 +130,7 @@ test("put", OPTIONS, async () => {
   assertEquals(data, { id: 3, status: "put" });
 });
 
-// Tries non-existant user 123 on a "promised" method and get a 404
+// Tries non-existent user 123 on a "promised" method and get a 404
 test("getPromiseFail", OPTIONS, async () => {
   const { status, data } = await fetcher.go("GET", "/users/123/async", undefined, true);
   assertEquals(status, STATUS_CODE.NotFound);
@@ -150,10 +151,13 @@ test("nonExistant", OPTIONS, async () => {
 });
 
 // Gets an image via an extension controller method (see method 'get_$id_avatar$$png' in file 'users.controller.ts')
+// We are testing both the extension as well, as the Typescript defined parameter 'bytes' that is a required
+// boolean parameter, but we can only know that with the 'types' provider (will fail with 'source' provider)
+// ⚠️ WARNING: WILL ONLY WORK WITH TYPES!
 test("image", OPTIONS, async () => {
-  const { status, headers } = await fetcher.go("GET", "/users/0/avatar.png");
-  assertEquals(status, STATUS_CODE.OK);
-  assertEquals(headers.get("content-type"), "image/png");
+  const { status, headers } = await fetcher.go("GET", "/users/0/avatar.png", undefined, true);
+  assertEquals(status, getProvider() === "source" ? STATUS_CODE.BadRequest : STATUS_CODE.OK);
+  assertEquals(headers.get("content-type"), getProvider() === "source" ? "application/json; charset=UTF-8" : "image/png");
 });
 
 // Get a custom response via a method that returns a response directly
@@ -172,9 +176,8 @@ test("invalid", OPTIONS, async () => {
 // Gets multiple users via GET /users/multiple
 // ⚠️ WARNING: WILL ONLY WORK WITH TYPES!
 test("get multiple", OPTIONS, async () => {
-  if (getProvider() === "source") return;
   const { status, data } = await fetcher.go("GET", "/users/multiple?ids=[2,3]");
-  assertEquals(status, STATUS_CODE.OK);
+  assertEquals(status, getProvider() === "source" ? STATUS_CODE.OK : STATUS_CODE.OK);
   assertEquals(data, [{ id: 2, name: "Janet", comment: "Forgot the T" }, { id: 3, name: "Pat", comment: "Nickname is better" }]);
 });
 

@@ -43,7 +43,7 @@ export default class UsersController {
   // GET /users/multiple
   // ⚠️ WARNING: WILL ONLY WORK WITH TYPES!
   get_multiple(ids: number[]) {
-    return users.filter((u) => ids.includes(u.id));
+    return ids.map((id) => users.find((u) => u.id === id));
   }
 
   // GET /users/:id
@@ -98,11 +98,11 @@ export default class UsersController {
   }
 
   // GET /users/:id/avatar.png
-  get_$id_avatar_$_png(id = -1) {
+  get_$id_avatar_$_png(id = -1, bytes?: boolean) {
     if (!users.find((u) => u.id === id)) throw new Deno.errors.NotFound();
     // deno-fmt-ignore
     const png = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABZSURBVDhPYxgFtAXsQNwHxPOAmB8kQCpIB+JlQAwypA0kQCrQB+J7UOwOEiAV2APxaSC+DcT+IAFSAMj/74DYHIjVgfgaEINcRDQAafyPhsOBeBRQHzAwAACMiw6sN2ANVQAAAABJRU5ErkJggg==";
-    return atob(png);
+    return bytes ? atob(png) : png;
   }
 
   // GET /users/pgp
