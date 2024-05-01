@@ -164,7 +164,7 @@ function validate(parameters: Record<string, unknown>, schema: Schema): Record<s
     else if (expectedType === "string") parameters[name] = chopQuotes(value as string);
     else {
       try {
-        parameters[name] = typeof(value) === "string" ? JSON.parse(value as string) : value;
+        parameters[name] = typeof value === "string" ? JSON.parse(value as string) : value;
       } catch (_ex) {
         logger.warn({ method: "validate", parameter: name, type: expectedType, value: value, status: STATUS_CODE.BadRequest });
         // If we do not know the expected type, be lenient and assume a string
@@ -219,7 +219,7 @@ export async function loadControllers(path: string, suffix = ".ts", classes?: bo
 }
 
 // Will return a middleware that takes `ctx` as a single parameter
-async function handleOne<T extends Controller>(controller: T, request: Request, base = controller.base, quiet = false) {
+async function handleOne<T extends Controller>(controller: T, request: Request, base = controller.base, env?: Record<string, unknown>, quiet = false) {
   let ct = contentType("json");
 
   // If there is no base, assign the kebab version of the controller name
@@ -255,8 +255,9 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
     parameters[name] = value;
   }
 
-  // Assign request
+  // Assign request and copy variables from the environment
   parameters.$request = request;
+  Object.assign(parameters, env);
 
   // Extract extension
   const pathname = new URL(request.url).pathname;
@@ -297,7 +298,7 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
     else if (body instanceof ArrayBuffer) ct = contentType("bin");
     else body = JSON.stringify(body);
 
-    // Contruct response
+    // Construct response
     return new Response(body, { status: STATUS_CODE.OK, headers: { "content-type": ct } });
   } catch (ex) {
     if (!quiet && ex.message) console.warn("⚠️  [GROUT] " + ex.message);
@@ -320,7 +321,7 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
   }
 }
 
-function handleMany(controllers: Map<string, Controller>, request: Request, globalPrefix = "", quiet = false): Promise<Response | undefined> {
+function handleMany(controllers: Map<string, Controller>, request: Request, globalPrefix = "", env?: Record<string, unknown>, quiet = false): Promise<Response | undefined> {
   // Get the prefix to the request and handle appropriately
   const url = new URL(request.url);
   if (!url.pathname.startsWith(globalPrefix)) return Promise.resolve(undefined);
@@ -334,13 +335,19 @@ function handleMany(controllers: Map<string, Controller>, request: Request, glob
 
   // Otherwise use 'handleOne' for the individual controller
   const controller = controllers.get(base);
-  return handleOne(controller!, request, globalPrefix + base, quiet);
+  return handleOne(controller!, request, globalPrefix + base, env, quiet);
 }
 
-function handle(controllerOrControllers: Controller | Map<string, Controller>, request: Request, prefix = "", quiet = false): Promise<Response | undefined> {
+function handle(
+  controllerOrControllers: Controller | Map<string, Controller>,
+  request: Request,
+  prefix = "",
+  env?: Record<string, unknown>,
+  quiet = false,
+): Promise<Response | undefined> {
   const many = controllerOrControllers instanceof Map;
-  if (many) return handleMany(controllerOrControllers, request, prefix, quiet);
-  else return handleOne(controllerOrControllers, request, prefix, quiet);
+  if (many) return handleMany(controllerOrControllers, request, prefix, env, quiet);
+  else return handleOne(controllerOrControllers, request, prefix, env, quiet);
 }
 
 export { handle };

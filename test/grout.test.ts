@@ -21,10 +21,12 @@ setCurrentUserChecker<string>((request: Request) => {
   return Promise.resolve(user);
 });
 
-Deno.serve({ port: PORT }, async (request: Request) => {
+Deno.serve({ port: PORT }, async (request, info) => {
   // Set url so that it can be used to load the controller
   if (getProvider() === "types") controller.url = new URL("users.controller.ts", import.meta.url);
-  const response = await handle(controller, request, "/users", true);
+  // Environment variables will be copied verbatim
+  const env = { $remoteHost: info.remoteAddr.hostname, $remotePort: info.remoteAddr.port };
+  const response = await handle(controller, request, "/users", env, true);
   return response ?? new Response("NOT IMPLEMENTED", { status: STATUS_CODE.NotImplemented });
 });
 

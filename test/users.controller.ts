@@ -106,7 +106,9 @@ export default class UsersController {
   }
 
   // GET /users/pgp
-  get_pgp() {
+  // Testing that the response is a PGP message but only when called locally to test for env vars
+  get_pgp($remoteHost: string) {
+    if ($remoteHost !== "127.0.0.1") throw new Deno.errors.PermissionDenied();
     const pgp = "-----BEGIN PGP MESSAGE----- ... -----END PGP MESSAGE-----";
     return new Response(pgp, { headers: { "Content-Type": "application/pgp-encrypted" } });
   }

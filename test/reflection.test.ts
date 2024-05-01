@@ -20,11 +20,11 @@ test("typeOf", function fromSource() {
   assertEquals(typeOf("foo"), "string");
 
   // Arrays
-  assertEquals(typeOf(["foo","bar"]), "string[]");
-  assertEquals(typeOf(["foo",42]), "(number|string)[]");
-  assertEquals(typeOf(["foo",42,[new Date(),Symbol("ƛ")]]), "((Date|symbol)[]|number|string)[]");
-  assertEquals(typeOf(["foo","bar"], false), "string[]");
-  assertEquals(typeOf(["foo",42], false), "unknown[]");
+  assertEquals(typeOf(["foo", "bar"]), "string[]");
+  assertEquals(typeOf(["foo", 42]), "(number|string)[]");
+  assertEquals(typeOf(["foo", 42, [new Date(), Symbol("ƛ")]]), "((Date|symbol)[]|number|string)[]");
+  assertEquals(typeOf(["foo", "bar"], false), "string[]");
+  assertEquals(typeOf(["foo", 42], false), "unknown[]");
 
   // Objects
   assertEquals(typeOf({ foo: 42 }), "{foo:number}");

@@ -15,11 +15,11 @@ export function typeOf(value: unknown, useFullTypes = true): string {
 
   // Array types
   if (Array.isArray(value)) {
-    const innerTypes = new Set(value.map(i => typeOf(i, useFullTypes)));
+    const innerTypes = new Set(value.map((i) => typeOf(i, useFullTypes)));
     if (innerTypes.size === 0) return "unknown[]";
     if (innerTypes.size > 1 && !useFullTypes) return "unknown[]";
     const fullType = Array.from(innerTypes).sort().join("|");
-    return (innerTypes.size === 1 ? fullType : "("+fullType+")")+"[]";
+    return (innerTypes.size === 1 ? fullType : "(" + fullType + ")") + "[]";
   }
 
   // Named contructors
@@ -29,12 +29,12 @@ export function typeOf(value: unknown, useFullTypes = true): string {
 
   // Object types
   if (typeof value === "object") {
-    const innerTypes = new Map<string,string>();
-    Object.entries(value).forEach(([k,v]) => innerTypes.set(k, typeOf(v, useFullTypes)));
-    return "{" + Array.from(innerTypes).map(([k,v]) => k+":"+v).sort().join(",") + "}";
+    const innerTypes = new Map<string, string>();
+    Object.entries(value).forEach(([k, v]) => innerTypes.set(k, typeOf(v, useFullTypes)));
+    return "{" + Array.from(innerTypes).map(([k, v]) => k + ":" + v).sort().join(",") + "}";
   }
 
-  return  "object";
+  return "object";
 }
 
 // Using balanced parenthesis
