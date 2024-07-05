@@ -1,7 +1,7 @@
-import { getLogger } from "std/log/mod.ts";
-import { STATUS_CODE } from "std/http/mod.ts";
-import { contentType } from "std/media_types/mod.ts";
-import { getParametersFromAST, getParametersFromSource, typeOf } from "./reflection.ts";
+import { getLogger } from "@std/log";
+import { STATUS_CODE } from "@std/http";
+import { contentType } from "@std/media-types";
+import { getParametersFromAST, getParametersFromSource } from "./reflection.ts";
 
 // Special variables are $body, $request, $session, $user
 

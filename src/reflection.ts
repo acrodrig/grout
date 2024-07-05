@@ -1,4 +1,4 @@
-import { FunctionDeclaration, FunctionExpression, MethodDeclaration, Project } from "ts_morph/mod.ts";
+import { FunctionDeclaration, FunctionExpression, MethodDeclaration, Project } from "ts-morph";
 import { Property, Schema } from "./grout.ts";
 
 // Simple types for JSON schema

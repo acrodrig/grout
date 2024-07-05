@@ -2,8 +2,8 @@
 
 // Corresponds to https://github.com/typestack/routing-controllers/blob/develop/test/functional/json-controller-methods.spec.ts
 
-import { STATUS_CODE } from "std/http/mod.ts";
-import { assertEquals, assertExists } from "std/assert/mod.ts";
+import { STATUS_CODE } from "@std/http";
+import { assertEquals, assertExists } from "@std/assert";
 import { Controller, handle, loadControllers, setCurrentUserChecker } from "../src/grout.ts";
 import { Fetcher, getProvider } from "./helpers.ts";
 import UsersController from "./users.controller.ts";

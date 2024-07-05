@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno test -A
 
-import { assertEquals } from "std/assert/mod.ts";
+import { assertEquals } from "@std/assert";
 import { getParametersFromAST, getParametersFromSource, typeOf } from "../src/reflection.ts";
 
 const test = Deno.test;

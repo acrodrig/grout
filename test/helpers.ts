@@ -1,5 +1,5 @@
-import { type JsonValue } from "std/json/mod.ts";
-import { ConsoleHandler, getLogger, setup } from "std/log/mod.ts";
+import { type JsonValue } from "@std/json";
+import { ConsoleHandler, getLogger, setup } from "@std/log";
 
 const PROVIDER = Deno.env.get("TEST_PROVIDER") ?? Deno.args[0];
 if (!PROVIDER) console.warn("\n⚠️  Assuming specification from TYPES provider. You can use 'TEST_PROVIDER=<provider>' or '-- <provider>' (source, types)\n");
