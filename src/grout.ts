@@ -301,7 +301,7 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
     // Construct response
     return new Response(body, { status: STATUS_CODE.OK, headers: { "content-type": ct } });
   } catch (ex) {
-    if (!quiet && ex.message) console.warn("⚠️  [GROUT] " + ex.message);
+    if (!quiet && (ex as Error).message) console.warn("⚠️  [GROUT] " + (ex as Error).message);
 
     // Assign default status if we are here
     let status: number = STATUS_CODE.InternalServerError;
@@ -311,7 +311,7 @@ async function handleOne<T extends Controller>(controller: T, request: Request, 
     if (ex instanceof Deno.errors.NotSupported) status = STATUS_CODE.NotImplemented;
     if (ex instanceof Deno.errors.PermissionDenied) status = STATUS_CODE.Unauthorized;
 
-    const log = { method: "handle", httpMethod: request.method, route: route, status, message: ex.message };
+    const log = { method: "handle", httpMethod: request.method, route: route, status, message: (ex as Error).message };
     if (status === STATUS_CODE.InternalServerError) {
       logger.error(log);
       console.error(ex);
